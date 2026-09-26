@@ -14,6 +14,12 @@
     "installationFree": false,
     "pages": "$profile:main_pages",
     "routerMap": "$profile:route_map",
+    "metadata": [
+      {
+        "name": "GraphicsAccelerateKit_LTPO",
+        "value": "true"
+      }
+    ],
     "abilities": [
       {
         "name": "EntryAbility",

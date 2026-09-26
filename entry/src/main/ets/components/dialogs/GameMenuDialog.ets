@@ -65,6 +65,8 @@ export interface GameMenuCallbacks {
   onTogglePanZoom?: () => void;
   onResetPanZoom?: () => void;
   onSwitchCustomKeyProfile?: (name: string) => void;
+  onGetWindowBrightness?: () => Promise<number>;
+  onWindowBrightnessChange?: (brightness: number) => void;
 }
 
 /** 菜单项配置 */
@@ -198,6 +200,8 @@ export struct GameMenuDialog {
   // 自定义按键配置档案
   @State private customKeyProfileNames: string[] = [];
   @State private customKeyActiveProfile: string = '';
+  @State private windowBrightness: number = -1;
+  @State private windowBrightnessTouched: boolean = false;
 
   // 虚拟手柄设置本地状态（拖动 Slider 时实时回调）
   @State private controllerOpacityLocal: number = 0.75;
@@ -230,6 +234,12 @@ export struct GameMenuDialog {
   }
 
   aboutToAppear(): void {
+    this.windowBrightnessTouched = false;
+    if (this.callbacks.onGetWindowBrightness) {
+      this.callbacks.onGetWindowBrightness().then((brightness: number) => {
+        if (!this.windowBrightnessTouched) this.windowBrightness = brightness;
+      }).catch(() => {});
+    }
     this.shortcuts = this.shortcutManager.getShortcuts();
     this.currentBitrate = this.viewModel.getCurrentBitrate();
     this.bitrateSliderValue = this.bitrateToSliderValue(this.currentBitrate);
@@ -742,6 +752,7 @@ export struct GameMenuDialog {
     Scroll() {
       Row({ space: 12 }) {
         Column({ space: 12 }) {
+          this.WindowBrightnessCard()
           // 左列：排序后奇数位卡片（索引 0, 2, 4...）
           ForEach(this.sortedMainCards.filter((_: string, i: number) => i % 2 === 0),
             (cardId: string) => { this.RenderCardById(cardId) },
@@ -784,6 +795,7 @@ export struct GameMenuDialog {
   SingleColumnLayout() {
     Scroll() {
       Column({ space: 12 }) {
+        this.WindowBrightnessCard()
         // 按使用频率排列的主卡片
         ForEach(this.sortedMainCards,
           (cardId: string) => { this.RenderCardById(cardId) },
@@ -825,6 +837,59 @@ export struct GameMenuDialog {
     } else if (cardId === CARD_AUDIO_VIBRATION) {
       this.AudioVibrationCard()
     }
+  }
+
+  @Builder
+  WindowBrightnessCard() {
+    Column() {
+      Row() {
+        Image($r('app.media.ic_sun')).width(OV_FONT_LG).height(OV_FONT_LG)
+          .fillColor(StreamMenuColors.TextBright)
+        Text(' 窗口亮度')
+          .fontSize(OV_FONT_LG)
+          .fontWeight(FontWeight.Medium)
+          .fontColor(StreamMenuColors.TextBright)
+        Blank()
+        Text(this.windowBrightness < 0
+          ? '系统'
+          : `${Math.round(this.windowBrightness * 100)}%`)
+          .fontSize(12)
+          .fontColor(StreamMenuColors.AccentBlueText)
+          .fontWeight(FontWeight.Medium)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, top: 14, bottom: 4 })
+
+      Slider({
+        value: this.windowBrightness < 0 ? 0.5 : this.windowBrightness,
+        min: 0,
+        max: 1,
+        step: 0.01,
+        style: SliderStyle.OutSet
+      })
+        .width('100%')
+        .padding({ left: 14, right: 14 })
+        .blockColor(StreamMenuColors.AccentBlue)
+        .trackColor(StreamMenuColors.Track)
+        .selectedColor(StreamMenuColors.AccentBlue)
+        .showSteps(false)
+        .showTips(false)
+        .sliderInteractionMode(SliderInteraction.SLIDE_ONLY)
+        .onChange((value: number) => {
+          this.windowBrightnessTouched = true;
+          this.windowBrightness = Math.max(0, Math.min(1, value));
+          this.callbacks.onWindowBrightnessChange?.(this.windowBrightness);
+        })
+      Row() {
+        Text('0%').fontSize(OV_FONT_XS).fontColor(StreamMenuColors.TextFaint)
+        Blank()
+        Text('100%').fontSize(OV_FONT_XS).fontColor(StreamMenuColors.TextFaint)
+      }
+      .width('100%')
+      .padding({ left: 16, right: 16, bottom: 12 })
+    }
+    .width(OV_CARD_WIDTH)
+    .cardStyle()
   }
 
   @Builder

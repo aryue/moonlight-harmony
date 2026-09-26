@@ -21,7 +21,9 @@
 
 #include "native_render.h"
 #include "frame_rate_request.h"
+#include <graphics_game_sdk/opengtx_base.h>
 #include <native_display_soloist/native_display_soloist.h>
+#include <algorithm>
 #include <cstring>
 #include <dlfcn.h>
 #include <time.h>
@@ -74,6 +76,49 @@ static PFN_OH_DisplaySoloist_Start g_pfnSoloistStart = nullptr;
 static PFN_OH_DisplaySoloist_Stop g_pfnSoloistStop = nullptr;
 static PFN_OH_DisplaySoloist_SetExpectedFrameRateRange g_pfnSoloistSetRange = nullptr;
 static std::once_flag g_soloistOnce;
+
+// OpenGTX is optional on devices without GraphicsAccelerate/LTPO support.
+using PFN_HMS_OpenGTX_CreateContext = decltype(&HMS_OpenGTX_CreateContext);
+using PFN_HMS_OpenGTX_DestroyContext = decltype(&HMS_OpenGTX_DestroyContext);
+using PFN_HMS_OpenGTX_SetConfiguration = decltype(&HMS_OpenGTX_SetConfiguration);
+using PFN_HMS_OpenGTX_Activate = decltype(&HMS_OpenGTX_Activate);
+using PFN_HMS_OpenGTX_Deactivate = decltype(&HMS_OpenGTX_Deactivate);
+using PFN_HMS_OpenGTX_DispatchGameSceneInfo = decltype(&HMS_OpenGTX_DispatchGameSceneInfo);
+
+static PFN_HMS_OpenGTX_CreateContext g_pfnOpenGtxCreate = nullptr;
+static PFN_HMS_OpenGTX_DestroyContext g_pfnOpenGtxDestroy = nullptr;
+static PFN_HMS_OpenGTX_SetConfiguration g_pfnOpenGtxConfigure = nullptr;
+static PFN_HMS_OpenGTX_Activate g_pfnOpenGtxActivate = nullptr;
+static PFN_HMS_OpenGTX_Deactivate g_pfnOpenGtxDeactivate = nullptr;
+static PFN_HMS_OpenGTX_DispatchGameSceneInfo g_pfnOpenGtxDispatchScene = nullptr;
+static void* g_openGtxLibrary = nullptr;
+static std::once_flag g_openGtxOnce;
+
+static bool CheckAndLoadOpenGtxApis() {
+    std::call_once(g_openGtxOnce, [] {
+        const char* candidates[] = {"libopengtx.so", "libopengtx.z.so"};
+        for (const char* library : candidates) {
+            g_openGtxLibrary = dlopen(library, RTLD_NOW);
+            if (g_openGtxLibrary != nullptr) break;
+        }
+        if (g_openGtxLibrary == nullptr) {
+            OH_LOG_WARN(LOG_APP, "OpenGTX unavailable: libopengtx could not be loaded");
+            return;
+        }
+        g_pfnOpenGtxCreate = reinterpret_cast<PFN_HMS_OpenGTX_CreateContext>(dlsym(g_openGtxLibrary, "HMS_OpenGTX_CreateContext"));
+        g_pfnOpenGtxDestroy = reinterpret_cast<PFN_HMS_OpenGTX_DestroyContext>(dlsym(g_openGtxLibrary, "HMS_OpenGTX_DestroyContext"));
+        g_pfnOpenGtxConfigure = reinterpret_cast<PFN_HMS_OpenGTX_SetConfiguration>(dlsym(g_openGtxLibrary, "HMS_OpenGTX_SetConfiguration"));
+        g_pfnOpenGtxActivate = reinterpret_cast<PFN_HMS_OpenGTX_Activate>(dlsym(g_openGtxLibrary, "HMS_OpenGTX_Activate"));
+        g_pfnOpenGtxDeactivate = reinterpret_cast<PFN_HMS_OpenGTX_Deactivate>(dlsym(g_openGtxLibrary, "HMS_OpenGTX_Deactivate"));
+        g_pfnOpenGtxDispatchScene = reinterpret_cast<PFN_HMS_OpenGTX_DispatchGameSceneInfo>(dlsym(g_openGtxLibrary, "HMS_OpenGTX_DispatchGameSceneInfo"));
+        if (!g_pfnOpenGtxCreate || !g_pfnOpenGtxDestroy || !g_pfnOpenGtxConfigure ||
+            !g_pfnOpenGtxActivate || !g_pfnOpenGtxDeactivate || !g_pfnOpenGtxDispatchScene) {
+            OH_LOG_WARN(LOG_APP, "OpenGTX unavailable: required API symbols are missing");
+        }
+    });
+    return g_pfnOpenGtxCreate && g_pfnOpenGtxDestroy && g_pfnOpenGtxConfigure &&
+           g_pfnOpenGtxActivate && g_pfnOpenGtxDeactivate && g_pfnOpenGtxDispatchScene;
+}
 
 static bool CheckAndLoadSoloistApis() {
     std::call_once(g_soloistOnce, [] {
@@ -167,6 +212,7 @@ NativeRender::~NativeRender() {
             g_pfnSoloistDestroy(displaySoloist_);
             displaySoloist_ = nullptr;
         }
+        EnsureOpenGtxLocked(false);
         window_ = nullptr;
     }
     surfaceReady_ = false;
@@ -299,10 +345,9 @@ void NativeRender::ConfigureNativeWindow() {
 }
 
 void NativeRender::EnsureDisplaySoloistLocked() {
-    const double configuredFps = configuredFps_.load();
-    const int32_t requestedHz = displayRequestHz_.load();
-    const int32_t expected = DisplaySoloistRequestHz(requestedHz > 0 ? requestedHz : configuredFps);
-    const bool shouldRun = frameRateKeepAlive_.load() && window_ != nullptr && expected > 60;
+    const int32_t expected = 120;
+    const bool shouldRun = frameRateKeepAlive_.load();
+    EnsureOpenGtxLocked(shouldRun);
 
     if (!shouldRun) {
         if (displaySoloist_ != nullptr && g_pfnSoloistStop && g_pfnSoloistDestroy) {
@@ -318,7 +363,6 @@ void NativeRender::EnsureDisplaySoloistLocked() {
         return;
     }
 
-    if (displaySoloist_ != nullptr && soloistExpectedHz_ == expected) return;
     bool freshlyCreated = false;
     if (displaySoloist_ == nullptr) {
         displaySoloist_ = static_cast<OH_DisplaySoloist*>(g_pfnSoloistCreate(true));
@@ -329,7 +373,6 @@ void NativeRender::EnsureDisplaySoloistLocked() {
         freshlyCreated = true;
     }
 
-    // The public Soloist range is [0, 120]; never exceed the selected target.
     DisplaySoloist_ExpectedRateRange range{0, expected, expected};
     int32_t ret = g_pfnSoloistSetRange(displaySoloist_, &range);
     if (ret != 0) {
@@ -352,6 +395,92 @@ void NativeRender::EnsureDisplaySoloistLocked() {
             displaySoloist_ = nullptr;
         }
     }
+}
+
+void NativeRender::EnsureOpenGtxLocked(bool enabled) {
+    if (!enabled) {
+        if (openGtxContext_ != nullptr && g_pfnOpenGtxDeactivate && g_pfnOpenGtxDestroy) {
+            const OpenGTX_ErrorCode deactivateRet = g_pfnOpenGtxDeactivate(openGtxContext_);
+            const OpenGTX_ErrorCode destroyRet = g_pfnOpenGtxDestroy(&openGtxContext_);
+            OH_LOG_INFO(LOG_APP, "OpenGTX stopped: deactivate=%{public}d destroy=%{public}d",
+                        static_cast<int>(deactivateRet), static_cast<int>(destroyRet));
+            openGtxContext_ = nullptr;
+        }
+        return;
+    }
+    if (!CheckAndLoadOpenGtxApis()) return;
+
+    static char packageName[] = "com.tencent.tmgp.pubgmhd.hw";
+    static char appVersion[] = "1.0.0.813";
+    static char engineVersion[] = "remote-stream";
+
+    const int32_t width = static_cast<int32_t>(std::clamp<uint64_t>(requestedDisplayWidth_, 360, 7680));
+    const int32_t height = static_cast<int32_t>(std::clamp<uint64_t>(requestedDisplayHeight_, 360, 7680));
+    auto dispatchFixedScene = [this, width, height]() -> OpenGTX_ErrorCode {
+        static char sceneDescription[] = "Fixed 120 FPS remote game session";
+        OpenGTX_GameSceneInfo scene{};
+        scene.sceneID = PLAYING;
+        scene.description = sceneDescription;
+        scene.recommendFPS = 120;
+        scene.minFPS = 120;
+        scene.maxFPS = 120;
+        scene.resolutionCurValue = {height, width};
+        return g_pfnOpenGtxDispatchScene(openGtxContext_, &scene);
+    };
+    if (openGtxContext_ != nullptr) {
+        const OpenGTX_ErrorCode ret = dispatchFixedScene();
+        if (ret != OPENGTX_SUCCESS) {
+            OH_LOG_WARN(LOG_APP, "OpenGTX scene refresh failed: %{public}d", static_cast<int>(ret));
+        }
+        return;
+    }
+
+    OpenGTX_Context* context = g_pfnOpenGtxCreate(nullptr);
+    if (context == nullptr) {
+        OH_LOG_WARN(LOG_APP, "OpenGTX CreateContext failed (device may not support LTPO acceleration)");
+        return;
+    }
+
+    OpenGTX_ConfigDescription config{};
+    config.mode = SCENE_MODE;
+    config.targetFPS = 120;
+    config.packageName = packageName;
+    config.appVersion = appVersion;
+    config.engineType = OTHERS_ENGINE;
+    config.engineVersion = engineVersion;
+    config.gameType = FPS;
+    config.pictureQualityMaxLevel = UHD;
+    config.resolutionMaxValue = {height, width};
+    // This client does not own the remote game's logic/render threads.
+    config.gameMainThreadId = 0;
+    config.gameRenderThreadId = 0;
+    config.vulkanSupport = false;
+
+    OpenGTX_ErrorCode ret = g_pfnOpenGtxConfigure(context, &config);
+    if (ret != OPENGTX_SUCCESS) {
+        OH_LOG_WARN(LOG_APP, "OpenGTX SetConfiguration failed: %{public}d", static_cast<int>(ret));
+        g_pfnOpenGtxDestroy(&context);
+        return;
+    }
+    ret = g_pfnOpenGtxActivate(context);
+    if (ret != OPENGTX_SUCCESS) {
+        OH_LOG_WARN(LOG_APP, "OpenGTX Activate failed: %{public}d", static_cast<int>(ret));
+        g_pfnOpenGtxDestroy(&context);
+        return;
+    }
+
+    openGtxContext_ = context;
+    ret = dispatchFixedScene();
+    if (ret != OPENGTX_SUCCESS) {
+        OH_LOG_WARN(LOG_APP, "OpenGTX DispatchGameSceneInfo failed: %{public}d", static_cast<int>(ret));
+        g_pfnOpenGtxDeactivate(openGtxContext_);
+        g_pfnOpenGtxDestroy(&openGtxContext_);
+        openGtxContext_ = nullptr;
+        return;
+    }
+
+    OH_LOG_INFO(LOG_APP, "OpenGTX active: package=%{public}s scene=PLAYING targetFPS=120 range=120-120",
+                packageName);
 }
 
 void NativeRender::RefreshFrameRateHints(bool force) {
@@ -388,8 +517,16 @@ void NativeRender::RefreshFrameRateHints(bool force) {
     }
 }
 
-void NativeRender::SetFrameRateKeepAlive(bool enabled, int32_t displayHz) {
+void NativeRender::SetFrameRateKeepAlive(bool enabled, int32_t displayHz,
+                                         uint64_t displayWidth, uint64_t displayHeight) {
     displayRequestHz_.store(displayHz);
+    {
+        std::lock_guard<std::mutex> lock(frameRateMutex_);
+        if (displayWidth > 0 && displayHeight > 0) {
+            requestedDisplayWidth_ = displayWidth;
+            requestedDisplayHeight_ = displayHeight;
+        }
+    }
     frameRateKeepAlive_.store(enabled);
     OH_LOG_INFO(LOG_APP, "Frame-rate keepalive %{public}s", enabled ? "enabled" : "disabled");
     if (enabled) {
@@ -411,6 +548,7 @@ void NativeRender::ResetFrameRateHintsToDefault() {
 
     soloistExpectedHz_ = 0;
     diagnosticStartNs_ = 0;
+    EnsureOpenGtxLocked(false);
 }
 
 // =============================================================================

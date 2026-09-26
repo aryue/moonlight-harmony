@@ -2302,8 +2302,8 @@ napi_value MoonBridge_SetXComponentFrameRate(napi_env env, napi_callback_info in
 }
 
 napi_value MoonBridge_SetFrameRateKeepAlive(napi_env env, napi_callback_info info) {
-    size_t argc = 2;
-    napi_value argv[2];
+    size_t argc = 4;
+    napi_value argv[4];
     napi_get_cb_info(env, info, &argc, argv, nullptr, nullptr);
 
     if (argc < 1) {
@@ -2316,6 +2316,14 @@ napi_value MoonBridge_SetFrameRateKeepAlive(napi_env env, napi_callback_info inf
 
     double displayHz = 0;
     if (argc >= 2) napi_get_value_double(env, argv[1], &displayHz);
-    NativeRender::GetInstance()->SetFrameRateKeepAlive(enabled, FrameRateRequestHz(displayHz));
+    double displayWidth = 1920;
+    double displayHeight = 1080;
+    if (argc >= 4) {
+        napi_get_value_double(env, argv[2], &displayWidth);
+        napi_get_value_double(env, argv[3], &displayHeight);
+    }
+    const uint64_t width = displayWidth > 0 && displayWidth <= 7680 ? static_cast<uint64_t>(displayWidth) : 1920;
+    const uint64_t height = displayHeight > 0 && displayHeight <= 7680 ? static_cast<uint64_t>(displayHeight) : 1080;
+    NativeRender::GetInstance()->SetFrameRateKeepAlive(enabled, FrameRateRequestHz(displayHz), width, height);
     return GetUndefined(env);
 }

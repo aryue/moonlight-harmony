@@ -707,12 +707,15 @@ class MoonBridgeClass {
   }
 
   /**
-   * 启用/禁用 native DisplaySoloist 持续请求，displayHz 不改变串流 FPS。
-   * 系统可限制实际刷新率；流结束时禁用以免高刷请求残留耗电。
+   * 启用/禁用应用前台全局 120 Hz 请求（DisplaySoloist + OpenGTX）。
+   * 页面切换不影响此请求；应用进入后台时应禁用。
    * @param enabled 是否启用
+   * @param displayWidth 当前屏幕宽度，像素
+   * @param displayHeight 当前屏幕高度，像素
    */
-  setFrameRateKeepAlive(enabled: boolean, displayHz: number = 0): void {
-    nativeLib.setFrameRateKeepAlive(enabled, displayHz);
+  setFrameRateKeepAlive(enabled: boolean, displayHz: number = 120,
+                        displayWidth: number = 1920, displayHeight: number = 1080): void {
+    nativeLib.setFrameRateKeepAlive(enabled, displayHz, displayWidth, displayHeight);
   }
 
   // ==========================================================================

@@ -36,6 +36,7 @@
 // DisplaySoloist 完整声明在 native_display_soloist.h；此处仅前向声明，
 // 实现包含 SDK 头文件校验类型，并通过 dlsym 动态加载符号。
 typedef struct OH_DisplaySoloist OH_DisplaySoloist;
+typedef struct OpenGTX_Context OpenGTX_Context;
 
 /**
  * NativeRender 类
@@ -70,12 +71,11 @@ public:
     void SetConfiguredFps(double fps);
 
     /**
-     * 启用/禁用 DisplaySoloist 请求；displayHz 与串流调度 FPS 分开。
-     * 此通道仅支持 60 < displayHz <= 120，更高目标由 ArkUI 请求。
-     * 禁用时停止并释放 Soloist，
-     * 避免高刷请求在流结束后残留耗电。
+     * 启用/禁用固定 120 FPS 的 DisplaySoloist 与 OpenGTX 请求。
+     * displayHz 保留用于诊断兼容；停止时释放请求，避免串流结束后残留。
      */
-    void SetFrameRateKeepAlive(bool enabled, int32_t displayHz = 0);
+    void SetFrameRateKeepAlive(bool enabled, int32_t displayHz = 0,
+                               uint64_t displayWidth = 1920, uint64_t displayHeight = 1080);
 
     /**
      * 检查 DisplaySoloist 请求状态并聚合诊断；已有相同请求不重复设置。
@@ -146,8 +146,11 @@ private:
 
     static void SoloistFrameCallback(long long timestamp, long long targetTimestamp, void* data);
 
-    // 按 keepAlive_ 与 configuredFps_ 状态启动/更新/停止 DisplaySoloist（须持有 frameRateMutex_）
+    // 按 keepAlive_ 与 NativeWindow 状态启动/停止固定 120 FPS 请求（须持有 frameRateMutex_）
     void EnsureDisplaySoloistLocked();
+
+    // Start/stop a fixed 120 FPS OpenGTX scene request (须持有 frameRateMutex_).
+    void EnsureOpenGtxLocked(bool enabled);
 
     // 流结束/禁用时停止 Soloist 并复位诊断窗口
     void ResetFrameRateHintsToDefault();
@@ -199,6 +202,9 @@ private:
     std::atomic<int64_t> lastHintRefreshNs_{0};
     OH_DisplaySoloist* displaySoloist_ = nullptr;
     int32_t soloistExpectedHz_ = 0;
+    OpenGTX_Context* openGtxContext_ = nullptr;
+    uint64_t requestedDisplayWidth_ = 1920;
+    uint64_t requestedDisplayHeight_ = 1080;
     std::atomic<uint64_t> soloistCallbacks_{0};
     std::atomic<uint64_t> submittedFrames_{0};
     int64_t diagnosticStartNs_ = 0;

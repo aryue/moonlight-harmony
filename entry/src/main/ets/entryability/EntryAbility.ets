@@ -17,6 +17,7 @@ import { RcpSessionPool } from '../utils/RcpSessionPool';
 import { NetworkErrorClassifierSelfCheck } from '../utils/NetworkErrorClassifierSelfCheck';
 import { UI } from '../common/UI';
 import { Logger } from '../common/Logger';
+import { MoonBridge } from '../service/streaming/MoonBridge';
 
 const TAG = 'EntryAbility';
 
@@ -24,6 +25,7 @@ export default class EntryAbility extends UIAbility {
   private isDarkMode: boolean = false;
   private appStateCallback: ApplicationStateChangeCallback | null = null;
   private mainWindow: window.Window | null = null;
+  private globalFrameRateActivationTimer: number = -1;
 
   onCreate(want: Want, launchParam: AbilityConstant.LaunchParam): void {
     Logger.info(TAG, 'Ability onCreate');
@@ -51,6 +53,7 @@ export default class EntryAbility extends UIAbility {
 
   onDestroy(): void {
     Logger.info(TAG, 'Ability onDestroy');
+    this.setGlobalFrameRateRequest(false);
 
     // 取消应用状态监听
     this.unregisterAppStateCallback();
@@ -168,6 +171,9 @@ export default class EntryAbility extends UIAbility {
       }
     });
 
+    // App-wide request: keep the same 120 Hz target across all in-app pages.
+    this.setGlobalFrameRateRequest(true);
+
     // 设置窗口属性
     windowStage.getMainWindow().then((win) => {
       this.mainWindow = win;
@@ -231,6 +237,7 @@ export default class EntryAbility extends UIAbility {
 
   onWindowStageDestroy(): void {
     Logger.info(TAG, 'Ability onWindowStageDestroy');
+    this.setGlobalFrameRateRequest(false);
     // 注销 avoidAreaChange 监听，避免内存泄漏
     if (this.mainWindow) {
       try {
@@ -244,9 +251,37 @@ export default class EntryAbility extends UIAbility {
 
   onForeground(): void {
     Logger.info(TAG, 'Ability onForeground');
+    this.setGlobalFrameRateRequest(true);
   }
 
   onBackground(): void {
     Logger.info(TAG, 'Ability onBackground');
+    this.setGlobalFrameRateRequest(false);
+  }
+
+  private setGlobalFrameRateRequest(enabled: boolean): void {
+    if (this.globalFrameRateActivationTimer >= 0) {
+      clearTimeout(this.globalFrameRateActivationTimer);
+      this.globalFrameRateActivationTimer = -1;
+    }
+    if (enabled) {
+      // Let the foreground window/display policy settle before submitting the request.
+      this.globalFrameRateActivationTimer = setTimeout(() => {
+        this.globalFrameRateActivationTimer = -1;
+        this.applyGlobalFrameRateRequest(true);
+      }, 500);
+      return;
+    }
+    this.applyGlobalFrameRateRequest(false);
+  }
+
+  private applyGlobalFrameRateRequest(enabled: boolean): void {
+    try {
+      const displayInfo = display.getDefaultDisplaySync();
+      MoonBridge.setFrameRateKeepAlive(enabled, 120, displayInfo.width, displayInfo.height);
+      Logger.info(TAG, `Global 120 Hz request ${enabled ? 'enabled' : 'disabled'} (${displayInfo.width}x${displayInfo.height})`);
+    } catch (err) {
+      Logger.warn(TAG, `Global frame-rate request failed: ${err}`);
+    }
   }
 }
