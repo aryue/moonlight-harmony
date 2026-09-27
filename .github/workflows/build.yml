@@ -23,11 +23,11 @@ concurrency:
 
 env:
   NODE_OPTIONS: '--max_old_space_size=8192'
-  SDK_VERSION: '7.1-Release'
+  SDK_VERSION: '7.0-Release'
   CI_COMPILE_API_VERSION: '26'
   CI_TARGET_API_VERSION: '24'
   CMDLINE_TOOLS_VERSION: '5.1.0.840'
-  CACHE_VERSION: 'v12'
+  CACHE_VERSION: 'v13'
   # v0.6.0
   AUDIO_HAPTICS_SDK_REF: 'b71b47a08fd400996ed374a97e1bff73bac2932e'
 
