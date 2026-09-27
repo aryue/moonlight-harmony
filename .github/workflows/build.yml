@@ -166,14 +166,12 @@ jobs:
     - name: Add Graphics Accelerate Kit headers to Native SDK
       run: |
         set -euo pipefail
-        TOOLCHAIN_SDK="$HOME/cmdline-tools/sdk/default/openharmony/native"
         NATIVE_SDK="$HOME/ohos-sdk/native"
-        OPENGTX_INCLUDE="$TOOLCHAIN_SDK/sysroot/usr/include/graphics_game_sdk"
         NATIVE_INCLUDE="$NATIVE_SDK/sysroot/usr/include"
+        OPENGTX_HEADER="$(find "$HOME/cmdline-tools/sdk" -type f -path '*/graphics_game_sdk/opengtx_base.h' -print -quit)"
 
-        if [ ! -f "$OPENGTX_INCLUDE/opengtx_base.h" ]; then
+        if [ -z "$OPENGTX_HEADER" ]; then
           echo "::error::HarmonyOS command-line tools do not contain graphics_game_sdk/opengtx_base.h"
-          find "$HOME/cmdline-tools/sdk" -path '*/graphics_game_sdk/opengtx_base.h' -print || true
           exit 1
         fi
         if [ ! -d "$NATIVE_INCLUDE" ]; then
@@ -181,9 +179,10 @@ jobs:
           exit 1
         fi
 
+        OPENGTX_INCLUDE="$(dirname "$OPENGTX_HEADER")"
         mkdir -p "$NATIVE_INCLUDE/graphics_game_sdk"
         cp -a "$OPENGTX_INCLUDE/." "$NATIVE_INCLUDE/graphics_game_sdk/"
-        echo "Installed Graphics Accelerate Kit headers from command-line tools SDK"
+        echo "Installed Graphics Accelerate Kit headers from $OPENGTX_INCLUDE"
 
     - name: Setup environment
       run: |
