@@ -54,10 +54,10 @@ patch_ci_build_profile_versions() {
   local compile_version target_version
   case "${CI_COMPILE_API_VERSION:-${CI_TARGET_API_VERSION:-}}" in
     26) compile_version="26.0.0" ;;
-    24) compile_version="6.1.1" ;;
-    23) compile_version="6.1.0" ;;
-    22) compile_version="6.0.2" ;;
-    20) compile_version="6.0.0" ;;
+    24) compile_version="6.1.1(24)" ;;
+    23) compile_version="6.1.0(23)" ;;
+    22) compile_version="6.0.2(22)" ;;
+    20) compile_version="6.0.0(20)" ;;
     *) return 0 ;;
   esac
   case "${CI_TARGET_API_VERSION:-}" in
