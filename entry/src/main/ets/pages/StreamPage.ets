@@ -1025,13 +1025,6 @@ struct StreamPage {
             CustomKeyStore.setGameProfile(this.appId, profile.name);
           }
         }
-      },
-      onGetWindowBrightness: async () => {
-        if (!this.windowManager) return -1;
-        return await this.windowManager.getWindowBrightness();
-      },
-      onWindowBrightnessChange: (brightness: number) => {
-        void this.windowManager?.setWindowBrightness(brightness);
       }
     };
   }
@@ -1570,7 +1563,7 @@ struct StreamPage {
 
       const streamConfig = this.viewModel.streamConfig;
       if (streamConfig) {
-        // 保留原有 HDR 高亮度策略；菜单中的手动亮度滑杆可在串流中实时覆盖。
+        // 设置 HDR 高亮度（如果启用）
         await this.windowManager?.setHdrBrightness(streamConfig.hdr, streamConfig.hdrHighBrightness);
         // AIHDR 模式 (sdrToHdrMode===2)：启用系统 AI HDR 修饰器
         if (streamConfig.sdrToHdrMode === 2 && isAihdrSupported()) {

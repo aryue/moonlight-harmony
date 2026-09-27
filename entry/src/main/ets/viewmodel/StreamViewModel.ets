@@ -245,6 +245,8 @@ export class StreamViewModel {
     if (this.displaySettings.perfOverlayBgOpacity !== undefined) {
       this.overlayState.config.bgOpacity = this.displaySettings.perfOverlayBgOpacity;
     }
+    this.overlayState.config.paddingY = this.displaySettings.perfOverlayPaddingY ?? 0;
+    this.overlayState.config.contentScale = this.displaySettings.perfOverlayContentScale ?? 1;
     
     // 更新串流尺寸
     this.displayInfo.streamWidth = this.streamConfig.width;

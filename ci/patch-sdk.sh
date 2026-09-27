@@ -51,7 +51,15 @@ patch_ci_build_profile_versions() {
   [ "${GITHUB_ACTIONS:-}" = "true" ] || return 0
   [ -f "build-profile.json5" ] || return 0
 
-  local target_version
+  local compile_version target_version
+  case "${CI_COMPILE_API_VERSION:-${CI_TARGET_API_VERSION:-}}" in
+    26) compile_version="26.0.0" ;;
+    24) compile_version="6.1.1" ;;
+    23) compile_version="6.1.0" ;;
+    22) compile_version="6.0.2" ;;
+    20) compile_version="6.0.0" ;;
+    *) return 0 ;;
+  esac
   case "${CI_TARGET_API_VERSION:-}" in
     26) target_version="26.0.0" ;;
     24) target_version="6.1.1(24)" ;;
@@ -61,7 +69,7 @@ patch_ci_build_profile_versions() {
     *) return 0 ;;
   esac
 
-  TARGET_SDK_VERSION="$target_version" python3 - <<'PY'
+  COMPILE_SDK_VERSION="$compile_version" TARGET_SDK_VERSION="$target_version" python3 - <<'PY'
 import os
 import re
 
@@ -69,11 +77,12 @@ path = "build-profile.json5"
 with open(path, encoding="utf-8") as f:
     text = f.read()
 
+compile_version = os.environ["COMPILE_SDK_VERSION"]
 target_version = os.environ["TARGET_SDK_VERSION"]
 has_compile_sdk_version = re.search(r'"compileSdkVersion"\s*:', text) is not None
 text, compile_hits = re.subn(
     r'("compileSdkVersion"\s*:\s*")[^"]+(")',
-    rf'\g<1>{target_version}\2',
+    rf'\g<1>{compile_version}\2',
     text,
 )
 text, target_hits = re.subn(
@@ -94,7 +103,7 @@ if target_hits == 0 or compatible_hits == 0 or (has_compile_sdk_version and comp
 
 with open(path, "w", encoding="utf-8") as f:
     f.write(text)
-print(f"  Patched CI build-profile.json5 SDK versions: compile={target_version}, target={target_version}")
+print(f"  Patched CI build-profile.json5 SDK versions: compile={compile_version}, target={target_version}")
 PY
 }
 

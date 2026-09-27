@@ -266,7 +266,7 @@ export struct OptionPickerDialog {
                 this.controller.close();
               }
             })
-          }, (option: OptionItem, index: number) => `option_${index}_${option.title}`)
+          }, (option: OptionItem, index: number) => `option_${index}_${option.title}_${option.subtitle || ''}_${option.checked ? 'checked' : 'unchecked'}`)
           
           // 滑块区域（在选项列表末尾，滚动区域内）
           if (this.showSlider) {

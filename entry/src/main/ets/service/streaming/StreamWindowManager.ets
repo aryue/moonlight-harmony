@@ -435,27 +435,6 @@ export class StreamWindowManager {
 
   // ==================== 显示设置 ====================
 
-  /** 获取当前窗口设置值；-1 表示跟随系统亮度。 */
-  async getWindowBrightness(): Promise<number> {
-    try {
-      const win = await window.getLastWindow(this.context);
-      return win.getWindowProperties().brightness;
-    } catch (err) {
-      Logger.warn('StreamWindowManager', '读取窗口亮度失败:', JSON.stringify(err));
-      return -1;
-    }
-  }
-
-  /** 实时设置当前应用窗口亮度，不修改系统全局亮度。 */
-  async setWindowBrightness(brightness: number): Promise<void> {
-    try {
-      const win = await window.getLastWindow(this.context);
-      await win.setWindowBrightness(Math.max(0, Math.min(1, brightness)));
-    } catch (err) {
-      Logger.warn('StreamWindowManager', '设置窗口亮度失败:', JSON.stringify(err));
-    }
-  }
-
   /**
    * 设置 HDR 高亮度模式
    * 当 HDR 开启且用户启用高亮度选项时，将屏幕亮度调至最大

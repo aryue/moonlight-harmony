@@ -72,6 +72,8 @@ export struct PerformanceOverlay {
   @State overlayScale: number = 1.0;
   @State isVertical: boolean = true;
   @State overlayBgOpacity: number = 0.53;
+  @State overlayPaddingY: number = 0;
+  @State overlayContentScale: number = 1;
   @State currentSnapPosition: SnapPosition = SnapPosition.TOP_RIGHT;
   @State overlayDragging: boolean = false;  // 拖动中显示全圆角
   
@@ -117,6 +119,8 @@ export struct PerformanceOverlay {
     
     // 初始化背景透明度
     this.overlayBgOpacity = this.viewModel.overlayState.config.bgOpacity;
+    this.overlayPaddingY = this.viewModel.overlayState.config.paddingY;
+    this.overlayContentScale = this.viewModel.overlayState.config.contentScale;
     
     // 同步启用项目列表（@State 数组驱动 UI）
     this.enabledItemsList = Array.from(this.viewModel.overlayState.config.enabledItems);
@@ -396,7 +400,8 @@ export struct PerformanceOverlay {
           this.HorizontalContent()
         }
       }
-      .padding(this.isVertical ? 12 : { left: 12, right: 12, top: 8, bottom: 8 })
+      // 水平布局用于贴屏幕边缘，取消上下内边距，避免背景黑边挡住贴边位置。
+      .padding({ left: 12, right: 12, top: this.overlayPaddingY, bottom: this.overlayPaddingY })
       .backgroundColor(`#${Math.round(this.overlayBgOpacity * 255).toString(16).padStart(2, '0')}161616`)
       .borderRadius(this.overlayDragging ? 12 : getSnapBorderRadius(this.currentSnapPosition, 12))
       .border({
@@ -404,7 +409,7 @@ export struct PerformanceOverlay {
         color: `#${Math.round(this.lockFlashBorderOpacity * 255).toString(16).padStart(2, '0')}FFD700`
       })
       .opacity(this.overlayOpacity)
-      .scale({ x: this.overlayScale, y: this.overlayScale })
+      .scale({ x: this.overlayScale * this.overlayContentScale, y: this.overlayScale * this.overlayContentScale })
       .position({ x: this.overlayX, y: this.overlayY })
       // 锁定状态下透传触摸到下层串流视图，未锁定时拦截（用 overlayLocked 保证菜单解锁后立即刷新）
       .hitTestBehavior(this.overlayLocked ? HitTestMode.Transparent : HitTestMode.Block)
@@ -1018,6 +1023,18 @@ export struct PerformanceOverlay {
 
     // 隐藏覆盖层选项
     options.push({
+      title: '上下边距',
+      subtitle: `${this.overlayPaddingY} vp（点击切换）`,
+      value: 'cycle_padding',
+      icon: $r('app.media.perf_opacity')
+    });
+    options.push({
+      title: '字体 / 图标大小',
+      subtitle: `${Math.round(this.overlayContentScale * 100)}%（点击切换）`,
+      value: 'cycle_scale',
+      icon: $r('app.media.perf_opacity')
+    });
+    options.push({
       title: '隐藏覆盖层',
       subtitle: '可在游戏菜单中重新打开',
       value: 'hide_overlay',
@@ -1064,6 +1081,14 @@ export struct PerformanceOverlay {
           this.settingsDialogController?.close();
           return;
         }
+        if (val === 'cycle_padding') {
+          this.updatePaddingY(this.overlayPaddingY >= 12 ? 0 : this.overlayPaddingY + 4);
+          return;
+        }
+        if (val === 'cycle_scale') {
+          this.updateContentScale(this.overlayContentScale >= 1.4 ? 0.6 : this.overlayContentScale + 0.2);
+          return;
+        }
         if (val.startsWith('item_')) {
           const itemIndex = parseInt(val.replace('item_', ''));
           if (itemIndex >= 0 && itemIndex < allItems.length) {
@@ -1105,5 +1130,17 @@ export struct PerformanceOverlay {
     this.overlayBgOpacity = value;
     this.viewModel.overlayState.config.bgOpacity = value;
     PreferencesUtil.put(SettingsKeys.PERF_OVERLAY_BG_OPACITY, value);
+  }
+
+  private updatePaddingY(value: number): void {
+    this.overlayPaddingY = value;
+    this.viewModel.overlayState.config.paddingY = value;
+    PreferencesUtil.put(SettingsKeys.PERF_OVERLAY_PADDING_Y, value);
+  }
+
+  private updateContentScale(value: number): void {
+    this.overlayContentScale = value;
+    this.viewModel.overlayState.config.contentScale = value;
+    PreferencesUtil.put(SettingsKeys.PERF_OVERLAY_CONTENT_SCALE, value);
   }
 }

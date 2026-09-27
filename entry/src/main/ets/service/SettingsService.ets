@@ -156,6 +156,8 @@ export class SettingsKeys {
   static readonly PERF_OVERLAY_LOCKED: string = 'settings_perf_overlay_locked';
   static readonly PERF_OVERLAY_ITEMS: string = 'settings_perf_overlay_items';
   static readonly PERF_OVERLAY_BG_OPACITY: string = 'settings_perf_overlay_bg_opacity';
+  static readonly PERF_OVERLAY_PADDING_Y: string = 'settings_perf_overlay_padding_y';
+  static readonly PERF_OVERLAY_CONTENT_SCALE: string = 'settings_perf_overlay_content_scale';
   static readonly PERF_OVERLAY_GUIDE_SHOWN: string = 'settings_perf_overlay_guide_shown';
   static readonly LATENCY_TOAST: string = 'settings_latency_toast';
   static readonly LAST_STREAM_DIAGNOSTICS: string = 'last_stream_diagnostics';
@@ -280,6 +282,8 @@ export interface DisplaySettings {
   perfOverlayLocked?: boolean;       // 是否锁定覆盖层
   perfOverlayItems?: string[];       // 启用的性能项目
   perfOverlayBgOpacity?: number;     // 背景透明度 (0.0-1.0)
+  perfOverlayPaddingY?: number;      // 上下内边距 (vp)
+  perfOverlayContentScale?: number;  // 字体/图标缩放
 }
 
 /**
@@ -870,7 +874,9 @@ export class SettingsService {
       perfOverlayPosition: await this.getString(SettingsKeys.PERF_OVERLAY_POSITION, '右上角'),
       perfOverlayLocked: await this.getBoolean(SettingsKeys.PERF_OVERLAY_LOCKED, false),
       perfOverlayItems: items,
-      perfOverlayBgOpacity: await this.getNumber(SettingsKeys.PERF_OVERLAY_BG_OPACITY, 0.53)
+      perfOverlayBgOpacity: await this.getNumber(SettingsKeys.PERF_OVERLAY_BG_OPACITY, 0.53),
+      perfOverlayPaddingY: await this.getNumber(SettingsKeys.PERF_OVERLAY_PADDING_Y, 0),
+      perfOverlayContentScale: await this.getNumber(SettingsKeys.PERF_OVERLAY_CONTENT_SCALE, 1)
     };
   }
 

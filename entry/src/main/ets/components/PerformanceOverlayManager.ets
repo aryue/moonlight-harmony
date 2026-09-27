@@ -101,6 +101,8 @@ export class OverlayConfig {
   position: SnapPosition = SnapPosition.TOP_RIGHT;  // 当前位置（默认右上角）
   enabledItems: Set<string> = new Set<string>();   // 启用的项目（使用 string 类型）
   bgOpacity: number = 0.53;                        // 背景透明度（0.0-1.0）
+  paddingY: number = 0;                            // 上下内边距（vp）
+  contentScale: number = 1;                        // 内容缩放
 }
 
 // 性能项目信息类

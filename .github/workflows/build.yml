@@ -23,9 +23,10 @@ concurrency:
 
 env:
   NODE_OPTIONS: '--max_old_space_size=8192'
-  SDK_VERSION: '6.1-Release'
+  SDK_VERSION: '7.0-Release'
+  CI_COMPILE_API_VERSION: '26'
   CI_TARGET_API_VERSION: '24'
-  CMDLINE_TOOLS_VERSION: '5.1.0.840'
+  CMDLINE_TOOLS_VERSION: '26.0.0.821'
   CACHE_VERSION: 'v10'
   # v0.6.0
   AUDIO_HAPTICS_SDK_REF: 'b71b47a08fd400996ed374a97e1bff73bac2932e'
@@ -149,10 +150,34 @@ jobs:
         OUTPUT=$(ci/normalize-sdk.sh ~/ohos-sdk)
         echo "$OUTPUT"
         API_VER=$(echo "$OUTPUT" | grep "SDK_API_VERSION=" | cut -d= -f2)
+        COMPILE_SDK_VERSION=$(echo "$OUTPUT" | grep "HOS_COMPILE_SDK_VERSION=" | cut -d= -f2)
         TARGET_SDK_VERSION=$(echo "$OUTPUT" | grep "HOS_TARGET_SDK_VERSION=" | cut -d= -f2)
         echo "SDK_API_VERSION=$API_VER" >> "$GITHUB_ENV"
+        echo "COMPILE_SDK_VERSION=$COMPILE_SDK_VERSION" >> "$GITHUB_ENV"
         echo "TARGET_SDK_VERSION=$TARGET_SDK_VERSION" >> "$GITHUB_ENV"
-        echo "Target SDK version: $TARGET_SDK_VERSION"
+        echo "Compile SDK version: $COMPILE_SDK_VERSION; target SDK version: $TARGET_SDK_VERSION"
+
+    - name: Add Graphics Accelerate Kit headers to Native SDK
+      run: |
+        set -euo pipefail
+        TOOLCHAIN_SDK="$HOME/cmdline-tools/sdk/default/openharmony/native"
+        NATIVE_SDK="$HOME/ohos-sdk/native"
+        OPENGTX_INCLUDE="$TOOLCHAIN_SDK/sysroot/usr/include/graphics_game_sdk"
+        NATIVE_INCLUDE="$NATIVE_SDK/sysroot/usr/include"
+
+        if [ ! -f "$OPENGTX_INCLUDE/opengtx_base.h" ]; then
+          echo "::error::HarmonyOS command-line tools do not contain graphics_game_sdk/opengtx_base.h"
+          find "$HOME/cmdline-tools/sdk" -path '*/graphics_game_sdk/opengtx_base.h' -print || true
+          exit 1
+        fi
+        if [ ! -d "$NATIVE_INCLUDE" ]; then
+          echo "::error::Could not find Native SDK sysroot include directory: $NATIVE_INCLUDE"
+          exit 1
+        fi
+
+        mkdir -p "$NATIVE_INCLUDE/graphics_game_sdk"
+        cp -a "$OPENGTX_INCLUDE/." "$NATIVE_INCLUDE/graphics_game_sdk/"
+        echo "Installed Graphics Accelerate Kit headers from command-line tools SDK"
 
     - name: Setup environment
       run: |
@@ -182,7 +207,7 @@ jobs:
               {
                 "name": "default",
                 "compatibleSdkVersion": "5.0.0(12)",
-                "compileSdkVersion": "${TARGET_SDK_VERSION}",
+                "compileSdkVersion": "${COMPILE_SDK_VERSION}",
                 "targetSdkVersion": "${TARGET_SDK_VERSION}",
                 "runtimeOS": "HarmonyOS",
                 "buildOption": {
@@ -251,7 +276,7 @@ jobs:
                 "name": "default",
                 "signingConfig": "default",
                 "compatibleSdkVersion": "5.0.0(12)",
-                "compileSdkVersion": "${TARGET_SDK_VERSION}",
+                "compileSdkVersion": "${COMPILE_SDK_VERSION}",
                 "targetSdkVersion": "${TARGET_SDK_VERSION}",
                 "runtimeOS": "HarmonyOS",
                 "buildOption": {
